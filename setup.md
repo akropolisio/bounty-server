@@ -20,6 +20,7 @@
 1. `sudo apt-get install pkg-config libssl-dev` [?](https://docs.rs/openssl/0.10.23/openssl/)
 1. `cargo build --release`
 1. Edit `.env` file. Set up `RECAPTCHA_KEY` and `RUST_LOG` values.
+1. Edit `.env` file. Set `CORS_ORIGIN` to "*" or "domain.zone".
 
 
 Create DB-user & database:
@@ -51,3 +52,30 @@ One of following options:
 - ``kill `pidof cargo` ``
 - ``kill `pidof bounty-server` ``
 - ``kill `cat ./PID` ``
+
+## Daemonize
+
+[instructions](https://www.shellhacks.com/systemd-service-file-example/)
+
+- `sudo touch /etc/systemd/system/bountyd.service`
+- `sudo chmod 664 /etc/systemd/system/bountyd.service`
+
+/etc/systemd/system/bountyd.service:
+
+```ini
+[Unit]
+Description="Bounty Server"
+
+[Service]
+Type=simple
+WorkingDirectory=/root/bounty-server/
+PIDFile=/run/bountyd.pid
+ExecStart=/root/.cargo/bin/bounty-server
+ExecStop=/bin/kill -s QUIT $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- `sudo systemctl daemon-reload`
+- `sudo systemctl start bountyd`
