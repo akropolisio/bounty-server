@@ -6,6 +6,7 @@
 #[macro_use]
 extern crate diesel;
 
+use actix_web::web::Path;
 use std::env;
 use std::thread;
 use std::sync::Mutex;
@@ -66,7 +67,11 @@ fn main() -> Result<(), std::io::Error> {
 		                                    //  .route(web::get().to(index))
 		                                     .route(web::post().to_async(register))
 		                                     .route(web::head().to(|| HttpResponse::MethodNotAllowed())))
-														 .service(
+		          .service(
+			          web::resource("/1.0/get").route(web::get().to_async(search_query))
+					 )
+
+						.service(
              web::resource("/recaptcha_test/")
                  .route(web::get().to_async(recaptcha_test))
                  .route(web::post().to_async(recaptcha_test))
@@ -78,6 +83,7 @@ fn main() -> Result<(), std::io::Error> {
 	// _sys.run()
 	Ok(())
 }
+
 
 pub fn initialize_state(database_url: &str) {
 	// #[cfg(not(feature = "dbpool"))]
@@ -143,7 +149,13 @@ fn recaptcha_test(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<It
 }
 
 
+fn search_query(query: web::Query<api::Get>, req: HttpRequest) -> HttpResponse {
+	log::debug!("req: {:?}, query: {:?}", req, query);
+	search(web::Json(query.into_inner()), req)
+}
+
 fn search(data: web::Json<api::Get>, req: HttpRequest) -> HttpResponse {
+	// req.query_string().
 	log::debug!("req: {:?}, data: {:?}", req, data);
 
 	let data: api::Get = data.0.clone();
