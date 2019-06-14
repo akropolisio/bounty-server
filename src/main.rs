@@ -70,6 +70,9 @@ fn main() -> Result<(), std::io::Error> {
 		          .service(
 			          web::resource("/1.0/get").route(web::get().to_async(search_query))
 					 )
+		          .service(
+			          web::resource("/1.0/bootstrap").route(web::get().to_async(bootstrap))
+					 )
 
 						.service(
              web::resource("/recaptcha_test/")
@@ -148,6 +151,42 @@ fn recaptcha_test(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<It
 	futures::future::ok(HttpResponse::NotFound().json(api::ApiError::UserNotFound.to_resp()))
 }
 
+
+fn bootstrap(req: HttpRequest) -> HttpResponse {
+	log::debug!("req: {:?}", req);
+	use db::models::NewUser;
+
+	let new_users = [NewUser { terms_signed: false,
+	                           not_resident: false,
+	                           address: "0xFOO",
+	                           amount: 0 },
+	                 NewUser { terms_signed: false,
+	                           not_resident: false,
+	                           address: "0xBAR",
+	                           amount: 42 },
+	                 NewUser { terms_signed: true,
+	                           not_resident: true,
+	                           address: "0xBOO",
+	                           amount: 800 }];
+
+	{
+		use db::schema::users::dsl::*;
+		use diesel::prelude::*;
+
+		let state = state::State::get();
+		let conn = state.get_pool().get().unwrap();
+
+		// let insert = diesel::insert_into(users).values(&new_users[..]);
+		// let res = insert.execute(&conn);
+		for u in new_users.iter() {
+			let insert = diesel::insert_into(users).values(u);
+			let res = insert.execute(&conn);
+			log::debug!("boot: +user: {:?}", res);
+		}
+	}
+
+	HttpResponse::Ok().finish()
+}
 
 fn search_query(query: web::Query<api::Get>, req: HttpRequest) -> HttpResponse {
 	log::debug!("req: {:?}, query: {:?}", req, query);
