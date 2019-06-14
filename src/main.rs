@@ -35,6 +35,8 @@ fn main() -> Result<(), std::io::Error> {
 	dotenv().ok();
 	env_logger::init();
 
+	log::info!("PWD: {:?}", std::env::current_dir().unwrap());
+
 	let _rekey = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
 	let listen_url = env::var("LISTEN_URL").expect("LISTEN_URL must be set");
 	let cors_origin = env::var("CORS_ORIGIN").expect("CORS_ORIGIN must be set");
@@ -52,6 +54,19 @@ fn main() -> Result<(), std::io::Error> {
 	initialize_state(&database_url);
 
 	let serv = HttpServer::new(move || {
+						// let app = if let Ok(cors_origin) = cors_origin {
+						// 	App::new().wrap(Cors::new()
+		            //                // .disable_preflight()
+						// 					// .disable_vary_header()
+		            //                .allowed_origin(&cors_origin)
+		            //                .allowed_methods(vec!["GET", "POST"])
+		            //                .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+		            //                .allowed_header(http::header::CONTENT_TYPE)
+		            //                .max_age(3600))
+						// } else {
+						// 	App::new()
+						// };
+
 		           App::new().wrap(Cors::new()
 		                           // .disable_preflight()
 											// .disable_vary_header()
