@@ -35,6 +35,7 @@ fn main() -> Result<(), std::io::Error> {
 	env_logger::init();
 
 	let _rekey = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
+	let listen_url = env::var("LISTEN_URL").expect("LISTEN_URL must be set");
 
 	let database_url = {
 		use std::env::set_var;
@@ -70,7 +71,7 @@ fn main() -> Result<(), std::io::Error> {
                  .route(web::get().to_async(recaptcha_test))
                  .route(web::post().to_async(recaptcha_test))
 														 )
-		          }).bind("127.0.0.1:8080")?;
+		          }).bind(listen_url)?;
 	println!("starting");
 	serv.run()?;
 	println!("exitting");
