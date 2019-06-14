@@ -37,6 +37,7 @@ fn main() -> Result<(), std::io::Error> {
 
 	let _rekey = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
 	let listen_url = env::var("LISTEN_URL").expect("LISTEN_URL must be set");
+	let cors_origin = env::var("CORS_ORIGIN").expect("CORS_ORIGIN must be set");
 
 	let database_url = {
 		use std::env::set_var;
@@ -54,7 +55,7 @@ fn main() -> Result<(), std::io::Error> {
 		           App::new().wrap(Cors::new()
 		                           // .disable_preflight()
 											// .disable_vary_header()
-		                           .allowed_origin("https://bounty.akropolis.io/")
+		                           .allowed_origin(&cors_origin)
 		                           .allowed_methods(vec!["GET", "POST"])
 		                           .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
 		                           .allowed_header(http::header::CONTENT_TYPE)
@@ -62,9 +63,7 @@ fn main() -> Result<(), std::io::Error> {
 		         //  .register_data(state.clone())
 		         //  .data(web::JsonConfig::default().limit(4096))
 		          .service(web::resource("/1.0/").data(web::JsonConfig::default().limit(4096))
-		                                    //  .route(web::get().to(search))
 		                                     .route(web::get().to_async(search))
-		                                    //  .route(web::get().to(index))
 		                                     .route(web::post().to_async(register))
 		                                     .route(web::head().to(|| HttpResponse::MethodNotAllowed())))
 		          .service(
