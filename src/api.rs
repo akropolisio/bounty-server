@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use serde::{Serialize, Deserialize};
 use crate::db::models::User as DbUser;
+use crate::recaptcha::Code;
 
 type ErrorCode = u16;
 
@@ -85,11 +87,12 @@ impl Error {
 }
 
 
+#[derive(Debug)]
 pub enum ApiError {
 	UserNotFound,
 	UserIsResident,
 	TermsNotAccepted,
-	RecaptchaErr(recaptcha::Error),
+	RecaptchaErr(HashSet<Code>),
 }
 
 impl ApiError {
@@ -102,7 +105,7 @@ impl ApiError {
 			TermsNotAccepted => Error::new(902).into(),
 			RecaptchaErr(err) => {
 				Error { code: 906,
-				        message: format!("{}", err) }.into()
+				        message: format!("{}", err.iter().fold(String::new(), |a, c| format!("{} {}", a, c))).trim().to_string() }.into()
 			},
 		}
 	}

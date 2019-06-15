@@ -29,15 +29,16 @@ use futures::future::Future;
 mod db;
 mod state;
 mod api;
+mod recaptcha;
 
 
 fn main() -> Result<(), std::io::Error> {
 	dotenv().ok();
 	env_logger::init();
 
-	log::info!("PWD: {:?}", std::env::current_dir().unwrap());
+	println!("PWD: {:?}", std::env::current_dir().unwrap());
 
-	let _rekey = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
+	let rekey = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
 	let listen_url = env::var("LISTEN_URL").expect("LISTEN_URL must be set");
 	let cors_origin = env::var("CORS_ORIGIN").expect("CORS_ORIGIN must be set");
 
@@ -48,6 +49,12 @@ fn main() -> Result<(), std::io::Error> {
 		set_var("DB_WRITE_URL", &database_url);
 		database_url
 	};
+
+	println!("starting with config:");
+	println!("recaptcha key: {}", rekey);
+	println!("listenig url: {}", listen_url);
+	println!("database url: {}", database_url);
+	println!("CORS origin: {}", cors_origin);
 
 	let _sys = actix::System::new("actix_sys");
 	// let state = web::Data::new(Mutex::new(dbx::db_init()));
@@ -67,22 +74,24 @@ fn main() -> Result<(), std::io::Error> {
 		         //  .register_data(state.clone())
 		         //  .data(web::JsonConfig::default().limit(4096))
 		          .service(web::resource("/1.0/").data(web::JsonConfig::default().limit(4096))
-		                                     .route(web::get().to_async(search))
+		                                    //  .route(web::get().to_async(search))
+		                                     .route(web::get().to_async(search_async))
 		                                     .route(web::post().to_async(register))
 		                                     .route(web::head().to(|| HttpResponse::MethodNotAllowed())))
 		          .service(
 			          web::resource("/1.0/get").route(web::get().to_async(search_query))
 					 )
-		          .service(
-			          web::resource("/1.0/bootstrap").route(web::get().to_async(bootstrap))
-					 )
+		         //  .service(
+			      //     web::resource("/1.0/bootstrap").route(web::get().to_async(bootstrap))
+					//  )
 
 						.service(
-             web::resource("/recaptcha_test/")
+             web::resource("/1.0/recaptcha_test/")
                  .route(web::get().to_async(recaptcha_test))
                  .route(web::post().to_async(recaptcha_test))
 														 )
 		          }).bind(listen_url)?;
+
 	println!("starting");
 	serv.run()?;
 	println!("exitting");
@@ -112,84 +121,155 @@ fn recaptcha_request() -> impl Future {
 }
 
 
-fn recaptcha_test(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<Item = HttpResponse, Error = Error> {
-	use serde::{Serialize, Deserialize};
+// fn recaptcha_test(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<Item = HttpResponse, Error = Error> {
+fn recaptcha_test(data: web::Json<api::Get>, req: HttpRequest)
+                  -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
 	use actix_web::client::Client;
-	log::debug!("req: {:?}", req);
+	use actix_web::Error;
 
-	#[derive(Debug, Clone, Serialize, Deserialize)]
-	pub struct RecaptchaTestAns {
-		pub error: String,
-	}
+	log::debug!("req: {:?}", req);
+	log::debug!("data: {:?}", data);
 
 	let client = Client::default();
+	let url = {
+		let key = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
+		let addr: Option<std::net::IpAddr> = match req.connection_info().remote().map(|addr| addr.parse()) {
+			Some(Ok(addr)) => Some(addr),
+			_ => None,
+		};
+		recaptcha::url(&key, &data.0.recaptcha, addr.as_ref())
+	};
 
-	let fut = client.get("https://www.google.com/recaptcha/api/siteverify")
-	                .header("User-Agent", "Actix-web")
+	let fut = client.get(url.as_ref())
 	                .send()
+	                .map(|resp| {
+		                log::debug!("OK resp: {:?}", resp);
+		                resp
+		               })
+	                .from_err()
 	                .map_err(|err| {
-		                log::error!("resp: {:?}", err);
-		                format!("{}", err)
+		                log::error!("ERR resp: {:?}", err);
+		                err
 		               })
 	                .and_then(|mut response| {
-		                let f = response.json::<RecaptchaTestAns>().and_then(|val| {
-			                                                           println!("Response: {:?}", val);
-			                                                           futures::future::ok(val)
-			                                                          });
-		                f.map_err(|err| {
-			                 log::error!("parse: {:?}", err);
-			                 format!("{}", err)
-			                })
+		                log::debug!("OK got resp: {:?}", response);
+		                response.json::<recaptcha::RecaptchaResponse>()
+		                        .from_err()
+		                        .and_then(|response| {
+			                        log::debug!("OK parsed resp: {:?}", response);
+			                        let res = match (response.success, response.error_codes) {
+				                        (true, _) => Ok(()),
+			                          (false, Some(errors)) => Err(api::ApiError::RecaptchaErr(errors)),
+			                          (false, _) => Err(api::ApiError::RecaptchaErr(Default::default())),
+			                        };
+			                        futures::future::ok(res)
+			                       })
+		                        .map_err(|err| {
+			                        log::error!("ERR parse: {:?}", err);
+			                        err
+			                       })
 		               });
 
-	let fut = fut.map(|answer| {
-		             println!("answer: {:?}", answer);
-		             HttpResponse::NotFound().json(api::ApiError::UserNotFound.to_resp())
+	let fut = fut.map(|result| {
+		             println!("result: {:?}", result);
+		             match result {
+			             Ok(_) => HttpResponse::NotFound().json(api::ApiError::UserNotFound.to_resp()),
+		               Err(err) => HttpResponse::NotFound().json(err.to_resp()),
+		             }
 		            });
+	fut
+}
 
-	// TODO: ret fut
-	let res = fut.wait();
-	log::debug!("res: {:?}", res);
+fn recaptcha_future(recaptcha: String, req: HttpRequest)
+                    -> impl Future<Item = Result<(), api::ApiError>, Error = actix_web::Error> {
+	use actix_web::client::Client;
+	use actix_web::Error;
 
-	futures::future::ok(HttpResponse::NotFound().json(api::ApiError::UserNotFound.to_resp()))
+	let client = Client::default();
+	let url = {
+		let key = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
+		let addr: Option<std::net::IpAddr> = match req.connection_info().remote().map(|addr| addr.parse()) {
+			Some(Ok(addr)) => Some(addr),
+			_ => None,
+		};
+		recaptcha::url(&key, &recaptcha, addr.as_ref())
+	};
+
+	let fut = client.get(url.as_ref())
+	                .send()
+	                .map(|resp| {
+		                log::debug!("OK resp: {:?}", resp);
+		                resp
+		               })
+	                .from_err()
+	                .map_err(|err| {
+		                log::error!("ERR resp: {:?}", err);
+		                err
+		               })
+	                .and_then(|mut response| {
+		                log::debug!("OK got resp: {:?}", response);
+		                response.json::<recaptcha::RecaptchaResponse>()
+		                        .from_err()
+		                        .and_then(|response| {
+			                        log::debug!("OK parsed resp: {:?}", response);
+			                        let res = match (response.success, response.error_codes) {
+				                        (true, _) => Ok(()),
+			                          (false, Some(errors)) => Err(api::ApiError::RecaptchaErr(errors)),
+			                          (false, _) => Err(api::ApiError::RecaptchaErr(Default::default())),
+			                        };
+			                        futures::future::ok(res)
+			                       })
+		                        .map_err(|err| {
+			                        log::error!("ERR parse: {:?}", err);
+			                        err
+			                       })
+		               });
+	fut
+	// let fut = fut.map(|result| {
+	// 	             println!("result: {:?}", result);
+	// 	             match result {
+	// 		             Ok(_) => HttpResponse::NotFound().json(api::ApiError::UserNotFound.to_resp()),
+	// 	               Err(err) => HttpResponse::NotFound().json(err.to_resp()),
+	// 	             }
+	// 	            });
 }
 
 
-fn bootstrap(req: HttpRequest) -> HttpResponse {
-	log::debug!("req: {:?}", req);
-	use db::models::NewUser;
+// fn bootstrap(req: HttpRequest) -> HttpResponse {
+// 	log::debug!("req: {:?}", req);
+// 	use db::models::NewUser;
 
-	let new_users = [NewUser { terms_signed: false,
-	                           not_resident: false,
-	                           address: "0xFOO",
-	                           amount: 0 },
-	                 NewUser { terms_signed: false,
-	                           not_resident: false,
-	                           address: "0xBAR",
-	                           amount: 42 },
-	                 NewUser { terms_signed: true,
-	                           not_resident: true,
-	                           address: "0xBOO",
-	                           amount: 800 }];
+// 	let new_users = [NewUser { terms_signed: false,
+// 	                           not_resident: false,
+// 	                           address: "0xFOO",
+// 	                           amount: 0 },
+// 	                 NewUser { terms_signed: false,
+// 	                           not_resident: false,
+// 	                           address: "0xBAR",
+// 	                           amount: 42 },
+// 	                 NewUser { terms_signed: true,
+// 	                           not_resident: true,
+// 	                           address: "0xBOO",
+// 	                           amount: 800 }];
 
-	{
-		use db::schema::users::dsl::*;
-		use diesel::prelude::*;
+// 	{
+// 		use db::schema::users::dsl::*;
+// 		use diesel::prelude::*;
 
-		let state = state::State::get();
-		let conn = state.get_pool().get().unwrap();
+// 		let state = state::State::get();
+// 		let conn = state.get_pool().get().unwrap();
 
-		// let insert = diesel::insert_into(users).values(&new_users[..]);
-		// let res = insert.execute(&conn);
-		for u in new_users.iter() {
-			let insert = diesel::insert_into(users).values(u);
-			let res = insert.execute(&conn);
-			log::debug!("boot: +user: {:?}", res);
-		}
-	}
+// 		// let insert = diesel::insert_into(users).values(&new_users[..]);
+// 		// let res = insert.execute(&conn);
+// 		for u in new_users.iter() {
+// 			let insert = diesel::insert_into(users).values(u);
+// 			let res = insert.execute(&conn);
+// 			log::debug!("boot: +user: {:?}", res);
+// 		}
+// 	}
 
-	HttpResponse::Ok().finish()
-}
+// 	HttpResponse::Ok().finish()
+// }
 
 fn search_query(query: web::Query<api::Get>, req: HttpRequest) -> HttpResponse {
 	log::debug!("req: {:?}, query: {:?}", req, query);
@@ -197,6 +277,42 @@ fn search_query(query: web::Query<api::Get>, req: HttpRequest) -> HttpResponse {
 }
 
 fn search(data: web::Json<api::Get>, req: HttpRequest) -> HttpResponse {
+	// req.query_string().
+	log::debug!("req: {:?}, data: {:?}", req, data);
+
+	let data: api::Get = data.0.clone();
+
+	let state = state::State::get();
+	let conn = state.get_pool().get().unwrap();
+
+	let user = {
+		use db::models::User;
+		use db::schema::users::dsl::{address, users};
+		use diesel::prelude::{ExpressionMethods, QueryDsl, RunQueryDsl};
+
+		let result = users.filter(address.eq(&data.address)).first::<User>(&conn);
+		match result {
+			Ok(user) => {
+				log::debug!("get: found: {:?}", user);
+				user
+			},
+			Err(err) => {
+				log::debug!("get: not found: {:?}", err);
+				return HttpResponse::NotFound().json(api::ApiError::UserNotFound.to_resp());
+			},
+		}
+	};
+
+	if !user.terms_signed {
+		HttpResponse::NotFound().json(api::ApiError::TermsNotAccepted.to_resp())
+	} else if !user.not_resident {
+		HttpResponse::NotFound().json(api::ApiError::UserIsResident.to_resp())
+	} else {
+		HttpResponse::Ok().json(api::Resp::from(user))
+	}
+}
+
+fn search_async(data: web::Json<api::Get>, req: HttpRequest) -> HttpResponse {
 	// req.query_string().
 	log::debug!("req: {:?}, data: {:?}", req, data);
 
