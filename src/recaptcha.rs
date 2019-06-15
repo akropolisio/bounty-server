@@ -1,5 +1,9 @@
-use serde::{Deserializer, Deserialize};
+use std::fmt;
+use std::net::IpAddr;
 use std::collections::HashSet;
+use serde::{Deserializer, Deserialize};
+use url::Url;
+
 
 #[derive(Debug, Deserialize)]
 pub struct RecaptchaResponse {
@@ -18,7 +22,7 @@ pub enum Code {
 	Unknown(String),
 }
 
-use std::fmt;
+
 impl fmt::Display for Code {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let s = match self {
@@ -49,11 +53,6 @@ impl<'de> Deserialize<'de> for Code {
 }
 
 
-use std::net::IpAddr;
-// use actix_web::http::
-use url::Url;
-
-
 /// Build url to recaptcha
 pub fn url(key: &str, response: &str, user_ip: Option<&IpAddr>) -> Url {
 	let user_ip = user_ip.map(ToString::to_string);
@@ -70,22 +69,6 @@ pub fn url(key: &str, response: &str, user_ip: Option<&IpAddr>) -> Url {
 	url
 }
 
-
-// /// Verify a recaptcha user response
-// pub fn verify(key: &str, response: &str, user_ip: Option<&IpAddr>) -> Result<(), Error> {
-// 	let url = self::url(key, response, user_ip);
-
-// 	let client = Client::new();
-
-// 	let mut response = client.get(url).send()?;
-// 	let recaptcha_response = response.json::<RecaptchaResponse>()?;
-
-// 	match (recaptcha_response.success, recaptcha_response.error_codes) {
-// 		(true, _) => Ok(()),
-// 		(false, Some(errors)) => Err(Error::Codes(errors)),
-// 		(false, _) => Err(Error::Codes(HashSet::new()))
-// 	}
-// }
 
 #[test]
 fn decoding_test() {
