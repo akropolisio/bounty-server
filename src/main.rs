@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use dotenv::dotenv;
 
-use actix_web::middleware::cors::Cors;
+use actix_web::middleware::cors::{self, Cors};
 use actix_web::{http, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web::{http::Method, middleware};
 use actix_web::client::ClientResponse;
@@ -54,26 +54,15 @@ fn main() -> Result<(), std::io::Error> {
 	initialize_state(&database_url);
 
 	let serv = HttpServer::new(move || {
-						// let app = if let Ok(cors_origin) = cors_origin {
-						// 	App::new().wrap(Cors::new()
-		            //                // .disable_preflight()
-						// 					// .disable_vary_header()
-		            //                .allowed_origin(&cors_origin)
-		            //                .allowed_methods(vec!["GET", "POST"])
-		            //                .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
-		            //                .allowed_header(http::header::CONTENT_TYPE)
-		            //                .max_age(3600))
-						// } else {
-						// 	App::new()
-						// };
-
 		           App::new().wrap(Cors::new()
 		                           // .disable_preflight()
 											// .disable_vary_header()
-		                           .allowed_origin(&cors_origin)
-		                           .allowed_methods(vec!["GET", "POST"])
-		                           .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
-		                           .allowed_header(http::header::CONTENT_TYPE)
+		                           // .allowed_origin(&cors_origin)
+		                           .allowed_methods(vec!["GET", "POST", "OPTION"])
+		                           // .allowed_headers(cors::AllOrSome::All)
+											.send_wildcard()
+		                           // .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+		                           // .allowed_header(http::header::CONTENT_TYPE)
 		                           .max_age(3600))
 		         //  .register_data(state.clone())
 		         //  .data(web::JsonConfig::default().limit(4096))
