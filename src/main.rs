@@ -244,7 +244,8 @@ fn search(data: web::Json<api::Get>, req: HttpRequest) -> HttpResponse {
 }
 
 
-fn register(state: web::Data<Mutex<state::State>>, data: web::Json<api::Reg>, req: HttpRequest) -> HttpResponse {
+// fn register(state: web::Data<Mutex<state::State>>, data: web::Json<api::Reg>, req: HttpRequest) -> HttpResponse {
+fn register(data: web::Json<api::Reg>, req: HttpRequest) -> HttpResponse {
 	log::debug!("req: {:?}, data: {:?}", req, data);
 
 	let data: api::Reg = data.0.clone();

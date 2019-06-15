@@ -77,5 +77,7 @@ ExecStop=/bin/kill -s QUIT $MAINPID
 WantedBy=multi-user.target
 ```
 
+There `WorkingDirectory` point to dir with `.env` file.
+
 - `sudo systemctl daemon-reload`
 - `sudo systemctl start bountyd`
