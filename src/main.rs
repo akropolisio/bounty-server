@@ -50,14 +50,11 @@ fn main() -> Result<(), std::io::Error> {
 
 	let serv = HttpServer::new(move || {
 		           App::new().wrap(Cors::new()
-		                           // .disable_preflight()
-		                           // .disable_vary_header()
-		                           // .allowed_origin(&cors_origin)
+		                           .allowed_origin(&cors_origin)
+		                           .allowed_origin("https://akropolis.io")
+		                           .allowed_origin("https://*.akropolis.io")
 		                           .allowed_methods(vec!["GET", "POST", "OPTION"])
-		                           // .allowed_headers(cors::AllOrSome::All)
 		                           .send_wildcard()
-		                           // .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
-		                           // .allowed_header(http::header::CONTENT_TYPE)
 		                           .max_age(3600))
 		         //  .register_data(state.clone())
 		         //  .data(web::JsonConfig::default().limit(4096))

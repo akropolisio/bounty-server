@@ -20,7 +20,7 @@
 1. `sudo apt-get install pkg-config libssl-dev` [?](https://docs.rs/openssl/0.10.23/openssl/)
 1. `cargo build --release`
 1. Edit `.env` file. Set up `RECAPTCHA_KEY` and `RUST_LOG` values.
-1. Edit `.env` file. Set `CORS_ORIGIN` to "*" or "domain.zone".
+1. Edit `.env` file. Set `CORS_ORIGIN` to "*" or "https://domain.zone". See [cors/resource-processing-model](https://www.w3.org/TR/cors/#resource-processing-model).
 
 
 Create DB-user & database:
