@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use serde::{Serialize, Deserialize};
 use crate::db::models::User as DbUser;
 use crate::recaptcha::Code;
+use num_format::{Locale, ToFormattedString};
 
 type ErrorCode = u16;
 
@@ -56,14 +57,15 @@ impl From<DbUser> for Resp {
 pub struct User {
 	/// Ethereum address
 	pub address: String,
-	/// Amount of AKT tokens
-	pub amount: i64,
+	/// Amount of AKRO
+	pub amount: String,
 }
 
 impl From<crate::db::models::User> for User {
 	fn from(user: DbUser) -> Self {
 		Self { address: user.address.to_owned(),
-		       amount: user.amount }
+		       amount: user.amount.to_formatted_string(&Locale::en)
+		}
 	}
 }
 
