@@ -10,7 +10,7 @@ use std::env;
 use dotenv::dotenv;
 use futures::prelude::*;
 
-use actix_web::middleware::cors::{self, Cors};
+use actix_cors::Cors;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web::Error;
 

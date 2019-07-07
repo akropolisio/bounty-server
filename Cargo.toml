@@ -11,6 +11,7 @@ r2d2 = "0.8.4" # reshared by diesel
 diesel = { version = "1.4.2", features = [ "sqlite", "r2d2" ] }
 # diesel = { version = "1.4.2", features = [ "sqlite" ] }
 actix-web = {version = "1.0.0", features = [ "ssl" ] }
+actix-cors = "0.1.0"
 # actix-web = "0.7"
 pretty_env_logger = "0.3.0"
 failure = "0.1.5"
