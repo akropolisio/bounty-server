@@ -1,8 +1,3 @@
-#![allow(stable_features)]
-#![feature(async_await, await_macro, futures_api)]
-#![allow(proc_macro_derive_resolution_fallback)]
-
-
 #[macro_use]
 extern crate diesel;
 
@@ -11,19 +6,58 @@ use dotenv::dotenv;
 use futures::prelude::*;
 
 use actix_cors::Cors;
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, App, Responder, HttpRequest, HttpResponse, HttpServer};
 use actix_web::Error;
 
 mod db;
 mod state;
 mod api;
 mod recaptcha;
-
+mod token;
 
 fn main() -> Result<(), std::io::Error> {
 	dotenv().ok();
 	env_logger::init();
 
+	let (_rekey, listen_url, cors_origin, database_url) = read_env_vars();
+
+	let _sys = actix::System::new("actix_sys");
+	initialize_state(&database_url);
+
+	let serv = HttpServer::new(move || {
+		           App::new().wrap(Cors::new()
+		                           .allowed_origin(&cors_origin)
+		                           .allowed_origin("https://akropolis.io")
+		                           .allowed_origin("https://*.akropolis.io")
+		                           .allowed_methods(vec!["GET", "POST", "OPTION"])
+		                           .send_wildcard()
+		                           .max_age(3600))
+		          .service(web::resource("/1.0/").data(web::JsonConfig::default().limit(4096))
+		                                         .route(web::get().to_async(search))
+		                                         .route(web::post().to_async(register))
+		                                         .route(web::head().to(|| HttpResponse::MethodNotAllowed())))
+		          // query fallbacks:
+		          .service(web::resource("/1.0/get").route(web::get().to_async(search_query)))
+		          .service(web::resource("/1.0/set").route(web::get().to_async(register_query)))
+		          .service(web::resource("/1.0/recaptcha_test/")
+		                                                       .route(web::get().to_async(recaptcha_test))
+		                                                       .route(web::post().to_async(recaptcha_test))
+		                  )
+		          .service(web::resource("/1.0/get").route(web::get().to_async(search_query)))
+
+                         // create a JWT token
+		          .service(web::resource("/1.0/token").route(web::post().to(create_token)))
+                         // logging of a user action
+		          .service(web::resource("/1.0/log").route(web::post().to(log_action)))
+		          }).bind(listen_url)?;
+
+	println!("starting");
+	serv.run()?;
+	println!("exitting");
+	Ok(())
+}
+
+fn read_env_vars() -> (String, String, String, String) {
 	println!("PWD: {:?}", std::env::current_dir().unwrap());
 
 	let rekey = env::var("RECAPTCHA_KEY").expect("RECAPTCHA_KEY must be set");
@@ -44,51 +78,14 @@ fn main() -> Result<(), std::io::Error> {
 	println!("database url: {}", database_url);
 	println!("CORS origin: {}", cors_origin);
 
-	let _sys = actix::System::new("actix_sys");
-	// let state = web::Data::new(Mutex::new(dbx::db_init()));
-	initialize_state(&database_url);
-
-	let serv = HttpServer::new(move || {
-		           App::new().wrap(Cors::new()
-		                           .allowed_origin(&cors_origin)
-		                           .allowed_origin("https://akropolis.io")
-		                           .allowed_origin("https://*.akropolis.io")
-		                           .allowed_methods(vec!["GET", "POST", "OPTION"])
-		                           .send_wildcard()
-		                           .max_age(3600))
-		         //  .register_data(state.clone())
-		         //  .data(web::JsonConfig::default().limit(4096))
-		          .service(web::resource("/1.0/").data(web::JsonConfig::default().limit(4096))
-		                                      // .route(web::get().to_async(search))
-		                                         .route(web::get().to_async(search))
-		                                         .route(web::post().to_async(register))
-		                                         .route(web::head().to(|| HttpResponse::MethodNotAllowed())))
-		          // query fallbacks:
-		          .service(web::resource("/1.0/get").route(web::get().to_async(search_query)))
-		          .service(web::resource("/1.0/set").route(web::get().to_async(register_query)))
-		          .service(web::resource("/1.0/recaptcha_test/")
-		                                                       .route(web::get().to_async(recaptcha_test))
-		                                                       .route(web::post().to_async(recaptcha_test))
-		                  )
-		          }).bind(listen_url)?;
-
-	println!("starting");
-	serv.run()?;
-	println!("exitting");
-	// _sys.run()
-	Ok(())
+    (rekey, listen_url, cors_origin, database_url)
 }
 
-
 pub fn initialize_state(database_url: &str) {
-	// #[cfg(not(feature = "dbpool"))]
-	// let sqldb = db::initialize();
 	let pool_size = if cfg!(feature = "sqlite") { 1 } else { 4 };
-	// let conn = db::establish_connection(database_url);
 	let conn = db::establish_connection_pool(pool_size, database_url);
 	state::State::initialize(state::State::new(conn));
 }
-
 
 fn recaptcha_test(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<Item = HttpResponse, Error = Error> {
 	log::debug!("req: {:?}", req);
@@ -106,7 +103,6 @@ fn recaptcha_test(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<It
 	fut
 }
 
-
 fn search_query(query: web::Query<api::Get>, req: HttpRequest) -> impl Future<Item = HttpResponse, Error = Error> {
 	log::debug!("req: {:?}, query: {:?}", req, query);
 	search(web::Json(query.into_inner()), req)
@@ -122,7 +118,7 @@ fn search(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<Item = Htt
 		   match result {
 			   Ok(_) => {
 			     let state = state::State::get();
-			     let conn = state.get_pool().get().unwrap();
+			     let conn = state.get_pool().get().expect("Can not get connection");
 
 			     let user = {
 				     use db::models::User;
@@ -155,7 +151,6 @@ fn search(data: web::Json<api::Get>, req: HttpRequest) -> impl Future<Item = Htt
 		  })
 }
 
-
 fn register_query(query: web::Query<api::Reg>, req: HttpRequest)
                   -> impl Future<Item = HttpResponse, Error = Error> {
 	log::debug!("req: {:?}, query: {:?}", req, query);
@@ -177,7 +172,7 @@ fn register(data: web::Json<api::Reg>, req: HttpRequest) -> impl Future<Item = H
 				     HttpResponse::NotFound().json(api::ApiError::TermsNotAccepted.to_resp())
 				    } else {
 				     let state = state::State::get();
-				     let conn = state.get_pool().get().unwrap();
+				     let conn = state.get_pool().get().expect("Can not get connection");
 
 				     let user = {
 					     use db::models::User;
@@ -219,7 +214,6 @@ fn register(data: web::Json<api::Reg>, req: HttpRequest) -> impl Future<Item = H
 		   }
 		  })
 }
-
 
 fn recaptcha_future(recaptcha: String, req: HttpRequest)
                     -> impl Future<Item = Result<(), api::ApiError>, Error = Error> {
@@ -264,4 +258,82 @@ fn recaptcha_future(recaptcha: String, req: HttpRequest)
 			              err
 			             })
 		     })
+}
+
+fn create_token(old_token: web::Query<api::OldToken>, req: HttpRequest) -> impl Responder {
+    log::debug!("req: {:?}, old_token: {:?}", req, old_token);
+
+    use db::schema::tokens;
+    use db::models::NewToken;
+    use diesel::prelude::RunQueryDsl;
+
+    let token = token::create_token();
+    let state = state::State::get();
+    let conn = state
+        .get_pool()
+        .get()
+        .expect("Can not get connection");
+
+    diesel::insert_into(tokens::table)
+        .values(NewToken { token: &token })
+        .execute(&conn)
+        .expect("Error saving new token");
+
+    use db::models::{NewLog, PayloadWrapper};
+    use db::schema::logs;
+
+    let headers = req
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("the header value has not visible ASCII chars").to_string()))
+        .collect();
+
+    diesel::insert_into(logs::table)
+        .values(NewLog { token: &token, action: "create_new_token", payload: PayloadWrapper(headers) })
+        .execute(&conn)
+        .expect("Error saving new log record");
+
+    HttpResponse::Ok()
+        .json(api::Token { status: "ok".to_string(), token })
+}
+
+fn log_action(log: web::Json<api::Log>, req: HttpRequest) -> impl Responder {
+    log::debug!("req: {:?}, log: {:?}", req, log);
+
+    use db::schema::tokens::{expired_at, token, self};
+    use db::models::Token;
+    use diesel::prelude::{ExpressionMethods, QueryDsl, RunQueryDsl};
+
+    let state = state::State::get();
+    let conn = state
+        .get_pool()
+        .get()
+        .expect("Can not get connection");
+
+    let result = tokens::table
+        .filter(token.eq(&log.token))
+        .filter(expired_at.gt(diesel::dsl::now))
+        .first::<Token>(&conn);
+
+    match result {
+        Ok(current_token) => {
+            log::debug!("current token: {:?}", current_token);
+
+            use db::models::{NewLog, PayloadWrapper};
+            use db::schema::logs;
+
+            diesel::insert_into(logs::table)
+                .values(NewLog { token: &log.token, action: &log.action, payload: PayloadWrapper(log.payload.clone()) })
+                .execute(&conn)
+                .expect("Error saving new log record");
+
+            HttpResponse::Ok()
+                .json(api::StatusOk { status: "ok".to_string() })
+        },
+        Err(err) => {
+            log::debug!("token not found, reason: {:?}", err);
+            HttpResponse::Unauthorized()
+                .json(api::StatusError { status: "error".to_string(), reason: "invalid token".to_string() })
+        }
+    }
 }

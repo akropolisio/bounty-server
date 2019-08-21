@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use serde::{Serialize, Deserialize};
 use crate::db::models::User as DbUser;
 use crate::recaptcha::Code;
@@ -113,12 +113,31 @@ impl ApiError {
 	}
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OldToken {
+    old_token: Option<String>
+}
 
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct Req<T> {
-// 	pub recaptcha: String,
-// 	pub data: T,
-// }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Token {
+    pub status: String,
+    pub token: String
+}
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusOk {
+    pub status: String
+}
 
-// pub type ReqReg = Req<Reg>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusError {
+    pub status: String,
+    pub reason: String
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Log {
+    pub token: String,
+    pub action: String,
+    pub payload: HashMap<String, String>
+}
