@@ -26,8 +26,4 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(
-    logs,
-    tokens,
-    users,
-);
+allow_tables_to_appear_in_same_query!(logs, tokens, users,);

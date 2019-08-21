@@ -1,10 +1,10 @@
-use serde::{Serialize, Deserialize};
 use jsonwebtoken::{encode, Header};
+use lazy_static::lazy_static;
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use std::time::{SystemTime, UNIX_EPOCH};
-use lazy_static::lazy_static;
-use rand::{thread_rng, Rng, distributions::Alphanumeric};
 
 lazy_static! {
     static ref SECRET: String = thread_rng().sample_iter(&Alphanumeric).take(20).collect();
@@ -17,9 +17,11 @@ struct Claims {
 }
 
 pub fn create_token() -> String {
-    let my_claims = Claims { timestamp: current_timestamp(), uid: Uuid::new_v4().to_string() };
-    encode(&Header::default(), &my_claims, SECRET.as_ref())
-        .expect("Can not create new token")
+    let my_claims = Claims {
+        timestamp: current_timestamp(),
+        uid: Uuid::new_v4().to_string(),
+    };
+    encode(&Header::default(), &my_claims, SECRET.as_ref()).expect("Can not create new token")
 }
 
 fn current_timestamp() -> u128 {
