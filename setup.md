@@ -80,4 +80,5 @@ WantedBy=multi-user.target
 There `WorkingDirectory` point to dir with `.env` file.
 
 - `sudo systemctl daemon-reload`
+- `sudo systemctl enable bountyd`
 - `sudo systemctl start bountyd`

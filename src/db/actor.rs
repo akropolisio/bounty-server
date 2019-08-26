@@ -1,6 +1,5 @@
 //! Diesel actor for Actix
 
-use std::sync::Arc;
 use diesel::prelude::*;
 use diesel::r2d2;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -8,12 +7,12 @@ use diesel::result::Error;
 use diesel::query_builder::{SelectQuery, QueryFragment};
 use ::actix::prelude::*;
 use diesel::query_dsl::LoadQuery;
-use std::marker::PhantomData;
-use std::env;
 use dotenv::dotenv;
-
 use log::debug;
 
+use std::marker::PhantomData;
+use std::env;
+use std::sync::Arc;
 
 #[cfg(feature = "dbpool")]
 pub type TheConnectionPool = Arc<r2d2::Pool<diesel::r2d2::ConnectionManager<TheConnection>>>;
